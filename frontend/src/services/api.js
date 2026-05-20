@@ -22,8 +22,8 @@ api.interceptors.request.use((config) => {
   config.params = config.params || {};
   // Добавляем параметры только для POST/PUT/PATCH и для GET списка, но не для GET конкретной поездки
   if (!config.url.match(/\/api\/trips\/\d+$/)) {  // если это не GET /api/trips/число
-    config.params.driver_tg_id = 1;
-    config.params.passenger_tg_id = 1;
+    config.params.driver_tg_id = user.id;
+    config.params.passenger_tg_id = user.id;
   }
   return config;
 });
