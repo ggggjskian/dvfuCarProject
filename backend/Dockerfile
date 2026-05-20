@@ -1,13 +1,17 @@
-# Используем образ Go
-FROM golang:1.25-alpine AS builder
+
+FROM golang:1.25 AS builder
 
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . .
-RUN go build -o main ./cmd/main.go
 
-FROM alpine:latest
+COPY . .
+
+# Переключили путь сборки на ./src
+RUN CGO_ENABLED=0 GOOS=linux go build -o main ./src
+
+# Финальный образ тоже делаем на полноценном golang, отказываясь от alpine
+FROM golang:1.25
 WORKDIR /root/
 
 COPY --from=builder /app/main .

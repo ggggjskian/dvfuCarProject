@@ -8,51 +8,68 @@ const api = axios.create({
   withCredentials: true
 })
 
-// ----- Пользователь Telegram -----
-function getTelegramUser() {
-  // Если мы не в Telegram (например, localhost), возвращаем тестового пользователя
-  if (!window.Telegram?.WebApp) {
-    return { id: 1 }; // тестовый ID
+export function getCurrentUser() {
+  if (typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.user) {
+    const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
+    return {
+      id: tgUser.id,
+      is_telegram: true,
+      name: tgUser.first_name || 'Пользователь Telegram'
+    };
   }
-  return window.Telegram.WebApp.initDataUnsafe?.user || null
+  
+  const savedUser = localStorage.getItem('user');
+  if (savedUser) {
+    const user = JSON.parse(savedUser);
+    return {
+      id: user.id, // Внутренний ID из БД
+      is_telegram: false,
+      name: user.username || 'Пользователь'
+    };
+  }
+  
+  return null;
 }
 
-// ----- Интерцептор для добавления tg_id -----
 api.interceptors.request.use((config) => {
-  config.params = config.params || {};
-  // Добавляем параметры только для POST/PUT/PATCH и для GET списка, но не для GET конкретной поездки
-  if (!config.url.match(/\/api\/trips\/\d+$/)) {  // если это не GET /api/trips/число
-    config.params.driver_tg_id = user.id;
-    config.params.passenger_tg_id = user.id;
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// ----- API для поездок -----
-export const tripsAPI = {
-  getAll: (params) => api.get('/api/trips', { params }),
-  search: (params) => api.get('/api/search_trips', { params }),
-  getById: (id) => api.get(`/api/trips/${id}`),
-  create: (tripData) => api.post('/api/trips', tripData),
-  book: (tripId, bookingData) => {
-    console.log("Booking request data:", bookingData);
-    return api.post(`/api/trips/${tripId}/book`, bookingData);
-  },
- } 
-
-// ----- API для бронирований -----
-export const bookingsAPI = {
-  updateStatus: (bookingId, status) => 
-    api.patch(`/api/bookings/${bookingId}`, { status })
+export const authAPI = {
+  register: (data) => api.post('/api/register', data),
+  login: (data) => api.post('/api/login', data).then(res => {
+    localStorage.setItem('token', res.data.token);
+    localStorage.setItem('user', JSON.stringify(res.data.user));
+    return res;
+  }),
+  logout: () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  }
 }
 
-// ----- API для пользователей -----
 export const usersAPI = {
   getOrCreate: (userData) => api.post('/api/users', userData),
   getUserTrips: (tgId) => api.get(`/api/users/${tgId}/trips`)
 }
 
-// ----- WebSocket трекер -----
+export const tripsAPI = {
+  getAll: (params) => api.get('/api/trips', { params }),
+  search: (params) => api.get('/api/search_trips', { params }),
+  getById: (id) => api.get(`/api/trips/${id}`),
+  create: (tripData) => api.post('/api/trips', tripData),
+  book: (tripId, bookingData) => api.post(`/api/trips/${tripId}/book`, bookingData),
+}
+
+export const bookingsAPI = {
+  updateStatus: (bookingId, status) => 
+    api.patch(`/api/bookings/${bookingId}`, { status })
+}
+
 export const createDriverTracker = (tripId, onLocationUpdate) => {
   const wsUrl = API_BASE_URL.replace('http', 'ws') + `/ws/trip/${tripId}`
   const ws = new WebSocket(wsUrl)
@@ -67,17 +84,18 @@ export const createDriverTracker = (tripId, onLocationUpdate) => {
   ws.onerror = (error) => console.error('WebSocket error', error)
 
   const sendLocation = (lat, lon, driverId) => {
-    ws.send(JSON.stringify({
-      action: 'location',
-      trip_id: tripId,
-      driver_id: driverId,
-      lat,
-      lon
-    }))
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        action: 'location',
+        trip_id: tripId,
+        driver_id: driverId,
+        lat,
+        lon
+      }))
+    }
   }
 
   return { ws, sendLocation }
 }
 
-// ----- Экспорт по умолчанию -----
 export default api
