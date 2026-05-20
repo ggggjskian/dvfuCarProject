@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # 1. БАЗА ДАННЫХ
   db:
     image: postgres:15-alpine
     environment:
@@ -9,13 +8,11 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: carpool_db
     ports:
-      # Слева (5433) - порт на твоем ноуте. Справа (5432) - порт внутри контейнера.
-      # Теперь нет конфликта с твоим локальным Postgres!
+
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # 2. БЭКЕНД (Go)
   backend:
     build: ./backend
     ports:
@@ -23,34 +20,31 @@ services:
     depends_on:
       - db
     environment:
-      # Бэкенд общается с базой внутри сети докера, поэтому тут остается 5432 и host=db
       - DB_DSN=host=db user=user password=password dbname=carpool_db port=5432 sslmode=disable
 
-  # 3. ФРОНТЕНД (Vue)
+
   frontend:
     build: ./frontend
     ports:
       - "5173:5173"
     volumes:
-      - ./frontend:/app        # Hot-reload: код на ноуте синхронизируется с докером
-      - /app/node_modules      # Защищаем node_modules докера от перезаписи
+      - ./frontend:/app       
+      - /app/node_modules      
     depends_on:
       - backend
     environment:
-      # Браузер на твоем ноуте будет стучаться сюда
       - VITE_API_URL=http://127.0.0.1:8000
 
-  # 4. ТЕЛЕГРАМ БОТ (Python)
+
   bot:
     build: ./telegram_bot
     depends_on:
       - backend
     environment:
-      - BOT_TOKEN=ТУТ_ТВОЙ_ТОКЕН_ОТ_BOTFATHER
-      # Бот ходит к бэкенду внутри докера, поэтому используем имя сервиса (backend)
+      - BOT_TOKEN=8694496064:AAHVkK2eZlZ9XyXtHFsLKJVGd1-UZXn-EgM
       - API_URL=http://backend:8000/api
-      # Адрес веб-аппки для локального тестирования (команда /test)
       - WEBAPP_URL=http://127.0.0.1:5173
+      - BOT_PROXY=socks5://VJGaWa:m1UBZ7@23.236.138.5:9240
 
 volumes:
   postgres_data:
